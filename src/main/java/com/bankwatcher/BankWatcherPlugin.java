@@ -55,7 +55,7 @@ public class BankWatcherPlugin extends Plugin
 	{
 		log.info("Bank Watcher plugin started");
 
-		BufferedImage icon = ImageIO.read(getClass().getResourceAsStream("/icons/Bankwatcher4.png")); // placeholder icon
+		BufferedImage icon = ImageIO.read(getClass().getResourceAsStream("/icons/Bankwatcher4.png"));
 
 		navButton = NavigationButton.builder()
 			.tooltip("Bank Watcher")
