@@ -56,8 +56,6 @@ public class BankWatcherService
 	private static final String QUANTITY_SNAPSHOT_KEY = "bank_quantities";
 	private static final String CONFIG_GROUP = "bankwatcher";
 	private static final String SNAPSHOT_KEY = "bank_snapshot";
-	private final OkHttpClient httpClient = new OkHttpClient();
-	private final Gson gson = new Gson();
 	private final Map<Integer, Integer> previousTotals = new HashMap<>();
 	private final Map<Integer, Integer> previousQuantities = new HashMap<>();
 	private final Map<Integer, Integer> wikiPrices = new HashMap<>();
@@ -67,6 +65,11 @@ public class BankWatcherService
 	private ItemManager itemManager;
 	@Inject
 	private ConfigManager configManager;
+	@Inject
+	private OkHttpClient httpClient;
+	@Inject
+	private Gson gson;
+
 	private boolean snapshotLoaded = false;
 
 	public boolean canScan()
