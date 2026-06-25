@@ -39,14 +39,15 @@ import javax.swing.ImageIcon;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingConstants;
+import net.runelite.client.ui.ColorScheme;
 
 public class BankItemPanel extends JPanel
 {
 	public BankItemPanel(BankItem item, BufferedImage icon)
 	{
 		setLayout(new BorderLayout(8, 0));
-		setBorder(BorderFactory.createCompoundBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4), BorderFactory.createLineBorder(new Color(60, 60, 60), 1)));
-		setBackground(new Color(40, 40, 40));
+		setBorder(BorderFactory.createCompoundBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4), BorderFactory.createLineBorder(ColorScheme.MEDIUM_GRAY_COLOR, 1)));
+		setBackground(ColorScheme.DARKER_GRAY_COLOR);
 		setMaximumSize(new Dimension(Integer.MAX_VALUE, 75));
 
 		JLabel iconLabel = (icon != null) ? new JLabel(new ImageIcon(icon)) : new JLabel("🪙", SwingConstants.CENTER);
@@ -121,41 +122,28 @@ public class BankItemPanel extends JPanel
 			label.setAlignmentX(Component.LEFT_ALIGNMENT);
 		}
 
-		// Compute delta
-		int deltaValue = item.getDelta();
-		String prefix;
-		Color deltaColor;
-
-		if (deltaValue > 0)
-		{
-			prefix = "+";
-			deltaColor = new Color(0, 200, 0);
-		}
-		else if (deltaValue < 0)
-		{
-			prefix = "-";
-			deltaColor = new Color(230, 60, 60);
-		}
-		else
-		{
-			prefix = "=";
-			deltaColor = Color.LIGHT_GRAY;
-		}
-
-		JLabel deltaLabel = new JLabel(String.format("Change: %s%,d", prefix, Math.abs(deltaValue)));
-		deltaLabel.setFont(deltaLabel.getFont().deriveFont(14f));
-		deltaLabel.setForeground(deltaColor);
-		deltaLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-		deltaLabel.setBorder(BorderFactory.createEmptyBorder(3, 0, 0, 0));
-
-		deltaLabel.setPreferredSize(new Dimension(160, 16));
-		deltaLabel.setMaximumSize(new Dimension(160, 16));
-		deltaLabel.setMinimumSize(new Dimension(160, 16));
-
-
 		statsPanel.add(geLabel);
 		statsPanel.add(totalLabel);
-		statsPanel.add(deltaLabel);
+
+		// Compute delta — only show when it changed
+		int deltaValue = item.getDelta();
+		if (deltaValue != 0)
+		{
+			String prefix = deltaValue > 0 ? "+" : "-";
+			Color deltaColor = deltaValue > 0 ? new Color(0, 200, 0) : new Color(230, 60, 60);
+
+			JLabel deltaLabel = new JLabel(String.format("Change: %s%,d", prefix, Math.abs(deltaValue)));
+			deltaLabel.setFont(deltaLabel.getFont().deriveFont(14f));
+			deltaLabel.setForeground(deltaColor);
+			deltaLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+			deltaLabel.setBorder(BorderFactory.createEmptyBorder(3, 0, 0, 0));
+
+			deltaLabel.setPreferredSize(new Dimension(160, 16));
+			deltaLabel.setMaximumSize(new Dimension(160, 16));
+			deltaLabel.setMinimumSize(new Dimension(160, 16));
+
+			statsPanel.add(deltaLabel);
+		}
 
 		textPanel.add(nameLabel);
 		textPanel.add(Box.createVerticalStrut(3));
