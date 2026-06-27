@@ -26,13 +26,13 @@
 package com.bankwatcher;
 
 import java.awt.image.BufferedImage;
-import javax.imageio.ImageIO;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
+import net.runelite.client.util.ImageUtil;
 
 @Slf4j
 @PluginDescriptor(
@@ -55,7 +55,7 @@ public class BankWatcherPlugin extends Plugin
 	{
 		log.info("Bank Watcher plugin started");
 
-		BufferedImage icon = ImageIO.read(getClass().getResourceAsStream("/icons/Bankwatcher4.png"));
+		BufferedImage icon = ImageUtil.loadImageResource(getClass(), "/icons/Bankwatcher4.png");
 
 		navButton = NavigationButton.builder()
 			.tooltip("Bank Watcher")

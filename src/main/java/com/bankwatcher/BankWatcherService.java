@@ -285,7 +285,7 @@ public class BankWatcherService
 
 				Request request = new Request.Builder()
 						.url(url)
-						.header("User-Agent", "bankwatcher-plugin (contact: yourname@example.com)")
+						.header("User-Agent", "bankwatcher-plugin (contact: https://github.com/Khaled2143)")
 						.build();
 
 				try (Response response = httpClient.newCall(request).execute())
