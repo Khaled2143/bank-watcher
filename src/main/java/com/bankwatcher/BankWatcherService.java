@@ -1,27 +1,27 @@
 /*
-* Copyright (c) 2025, Khaled Ahmed
-* All rights reserved.
-*
-* Redistribution and use in source and binary forms, with or without
-* modification, are permitted provided that the following conditions are met:
-*
-* 1. Redistributions of source code must retain the above copyright notice, this
-*    list of conditions and the following disclaimer.
-* 2. Redistributions in binary form must reproduce the above copyright notice,
-*    this list of conditions and the following disclaimer in the documentation
-*    and/or other materials provided with the distribution.
-*
-* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-* ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-* WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
-* ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-* (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-* LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-* ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-* (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
+ * Copyright (c) 2025, Khaled Ahmed
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 
 package com.bankwatcher;
 
@@ -34,6 +34,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.function.Consumer;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
@@ -52,13 +54,13 @@ public class BankWatcherService
 {
 	private static final String SCAN_COUNT_KEY = "scan_count";
 	private static final String LAST_RESET_KEY = "scan_reset_day";
-	private static final int MAX_SCANS_PER_DAY = 4;
+	private static final int MAX_SCANS_PER_DAY = 5;
 	private static final String QUANTITY_SNAPSHOT_KEY = "bank_quantities";
 	private static final String CONFIG_GROUP = "bankwatcher";
 	private static final String SNAPSHOT_KEY = "bank_snapshot";
 	private final Map<Integer, Integer> previousTotals = new HashMap<>();
 	private final Map<Integer, Integer> previousQuantities = new HashMap<>();
-	private final Map<Integer, Integer> wikiPrices = new HashMap<>();
+
 	@Inject
 	private Client client;
 	@Inject
@@ -69,46 +71,30 @@ public class BankWatcherService
 	private OkHttpClient httpClient;
 	@Inject
 	private Gson gson;
+	@Inject
+	private ScheduledExecutorService executor;
 
 	private boolean snapshotLoaded = false;
 
+	/**
+	 * Returns whether the user has scans remaining today. Does NOT increment.
+	 * Handles the daily reset.
+	 */
 	public boolean canScan()
 	{
-		String today = LocalDate.now().toString(); // e.g. "2025-11-03"
+		String today = LocalDate.now().toString();
 		String lastResetDay = configManager.getConfiguration(CONFIG_GROUP, LAST_RESET_KEY);
-		int scanCount = 0;
 
-		try
-		{
-			String countStr = configManager.getConfiguration(CONFIG_GROUP, SCAN_COUNT_KEY);
-			if (countStr != null)
-			{
-				scanCount = Integer.parseInt(countStr);
-			}
-		}
-		catch (Exception ignored)
-		{
-		}
-
-		// 🔹 If new day → reset count to 0
+		// New day -> reset stored count.
 		if (lastResetDay == null || !lastResetDay.equals(today))
 		{
-			scanCount = 0;
 			configManager.setConfiguration(CONFIG_GROUP, LAST_RESET_KEY, today);
 			configManager.setConfiguration(CONFIG_GROUP, SCAN_COUNT_KEY, "0");
-		}
-
-		// 🔹 If user still has scans left today
-		if (scanCount < MAX_SCANS_PER_DAY)
-		{
-			scanCount++;
-			configManager.setConfiguration(CONFIG_GROUP, SCAN_COUNT_KEY, String.valueOf(scanCount));
 			configManager.sendConfig();
 			return true;
 		}
 
-
-		return false;
+		return getScanCount() < MAX_SCANS_PER_DAY;
 	}
 
 	public String getScanStatusText()
@@ -129,78 +115,198 @@ public class BankWatcherService
 		{
 		}
 
-
 		boolean newDay = (lastResetDay == null || !lastResetDay.equals(today));
 		if (newDay)
 		{
-			return String.format("You’ve used 0/%d scans today. Daily reset active.", MAX_SCANS_PER_DAY);
+			return String.format("You've used 0/%d scans today. Daily reset active.", MAX_SCANS_PER_DAY);
 		}
 
 		return String.format("You have used %d/%d scans today. Next reset at midnight.", scanCount, MAX_SCANS_PER_DAY);
 	}
 
 	/**
-	 * Fetch the latest prices from the OSRS Wiki API (WeirdGloop).
+	 * Records that a scan was used (increments the daily counter).
+	 * Call this only when an actual scan is performed.
 	 */
-	private void fetchWikiPrices()
+	public void recordScan()
 	{
-		wikiPrices.clear();
+		int count = getScanCount() + 1;
+		configManager.setConfiguration(CONFIG_GROUP, SCAN_COUNT_KEY, String.valueOf(count));
+		configManager.sendConfig();
+	}
+	/**
+	 * Whether the bank is currently open/readable. Must be called on the client thread.
+	 */
+	public boolean isBankOpen()
+	{
+		return client.getItemContainer(InventoryID.BANK) != null;
+	}
+	/**
+	 * Returns how many scans have been used today WITHOUT incrementing.
+	 * Accounts for daily reset.
+	 */
+	public int getScanCount()
+	{
+		String today = LocalDate.now().toString();
+		String lastResetDay = configManager.getConfiguration(CONFIG_GROUP, LAST_RESET_KEY);
+
+		// New day means the effective count is 0.
+		if (lastResetDay == null || !lastResetDay.equals(today))
+		{
+			return 0;
+		}
+
+		try
+		{
+			String countStr = configManager.getConfiguration(CONFIG_GROUP, SCAN_COUNT_KEY);
+			if (countStr != null)
+			{
+				return Integer.parseInt(countStr);
+			}
+		}
+		catch (Exception ignored)
+		{
+		}
+
+		return 0;
+	}
+
+	public int getMaxScansPerDay()
+	{
+		return MAX_SCANS_PER_DAY;
+	}
+
+	/**
+	 * Reads bank item IDs on the client thread, then runs the network fetch and
+	 * delta calculation on a background thread. The result is delivered via callback.
+	 * Must be called from the client thread.
+	 */
+	public void scanBankAsync(Consumer<List<BankItem>> callback)
+	{
+		loadSnapshot();
+
+		ItemContainer bankItems = client.getItemContainer(InventoryID.BANK);
+		if (bankItems == null)
+		{
+			log.info("No bank items found.");
+			callback.accept(Collections.emptyList());
+			return;
+		}
+
+		// Read everything that requires the client thread NOW, into plain data.
+		List<int[]> rawItems = new ArrayList<>(); // [id, quantity]
+		List<Integer> tradeableIds = new ArrayList<>();
+		Map<Integer, String> names = new HashMap<>();
+
+		for (Item item : bankItems.getItems())
+		{
+			if (item == null || item.getId() <= 0)
+			{
+				continue;
+			}
+
+			int itemId = item.getId();
+			ItemComposition comp = itemManager.getItemComposition(itemId);
+			if (!comp.isTradeable())
+			{
+				continue;
+			}
+
+			rawItems.add(new int[]{itemId, item.getQuantity()});
+			tradeableIds.add(itemId);
+			names.put(itemId, comp.getName());
+		}
+
+		// Fallback prices (itemManager) are safe to read here too.
+		Map<Integer, Integer> fallbackPrices = new HashMap<>();
+		for (int id : tradeableIds)
+		{
+			fallbackPrices.put(id, itemManager.getItemPrice(id));
+		}
+
+		// Hand off to background thread: network + assembly, no client thread needed.
+		executor.execute(() ->
+		{
+			Map<Integer, Integer> livePrices = fetchWikiPrices(tradeableIds);
+
+			List<BankItem> trackedItems = new ArrayList<>();
+			for (int[] raw : rawItems)
+			{
+				int itemId = raw[0];
+				int quantity = raw[1];
+
+				int gePrice = livePrices.getOrDefault(itemId, fallbackPrices.getOrDefault(itemId, 0));
+				int totalPrice = gePrice * quantity;
+
+				int oldTotal = previousTotals.getOrDefault(itemId, totalPrice);
+				int delta = totalPrice - oldTotal;
+
+				int oldQuantity = previousQuantities.getOrDefault(itemId, quantity);
+				int quantityDelta = quantity - oldQuantity;
+
+				previousTotals.put(itemId, totalPrice);
+				previousQuantities.put(itemId, quantity);
+
+				trackedItems.add(new BankItem(
+						itemId,
+						names.get(itemId),
+						gePrice,
+						totalPrice,
+						quantity,
+						delta,
+						quantityDelta
+				));
+			}
+
+			saveSnapshot();
+			log.info("Tracked {} bank items.", trackedItems.size());
+
+			callback.accept(trackedItems);
+		});
+	}
+
+	/**
+	 * Fetch the latest prices from the OSRS Wiki API (WeirdGloop).
+	 * Runs on a background thread -- the Thread.sleep here is safe.
+	 */
+	private Map<Integer, Integer> fetchWikiPrices(List<Integer> itemIds)
+	{
+		Map<Integer, Integer> prices = new HashMap<>();
 		String baseUrl = "https://api.weirdgloop.org/exchange/history/osrs/latest";
 
 		try
 		{
-			ItemContainer bank = client.getItemContainer(InventoryID.BANK);
-			if (bank == null)
-			{
-				log.warn("No bank items found. Skipping price fetch.");
-				return;
-			}
-
-			List<Integer> allItemIds = new ArrayList<>();
-			for (Item item : bank.getItems())
-			{
-				if (item != null && item.getId() > 0)
-				{
-					allItemIds.add(item.getId());
-				}
-			}
-
 			int batchSize = 100;
-			for (int i = 0; i < allItemIds.size(); i += batchSize)
+			for (int i = 0; i < itemIds.size(); i += batchSize)
 			{
-				List<Integer> batch = allItemIds.subList(i, Math.min(i + batchSize, allItemIds.size()));
+				List<Integer> batch = itemIds.subList(i, Math.min(i + batchSize, itemIds.size()));
 				String joinedIds = String.join("|", batch.stream().map(String::valueOf).toArray(String[]::new));
 				String url = baseUrl + "?id=" + joinedIds;
 
 				Request request = new Request.Builder()
-					.url(url)
-					.header("User-Agent", "bankwatcher-plugin (contact: yourname@example.com)")
-					.build();
+						.url(url)
+						.header("User-Agent", "bankwatcher-plugin (contact: https://github.com/Khaled2143)")
+						.build();
 
 				try (Response response = httpClient.newCall(request).execute())
 				{
 					if (response.isSuccessful() && response.body() != null)
 					{
 						String body = response.body().string();
-
 						com.google.gson.JsonObject json = gson.fromJson(body, com.google.gson.JsonObject.class);
 
 						for (String key : json.keySet())
 						{
 							com.google.gson.JsonObject obj = json.getAsJsonObject(key);
-
 							if (obj != null && obj.has("price"))
 							{
 								int price = obj.get("price").getAsInt();
-
 								if (price > 0)
 								{
-									wikiPrices.put(Integer.parseInt(key), price);
+									prices.put(Integer.parseInt(key), price);
 								}
 							}
 						}
-
-
 						log.info("Fetched {} items for batch starting at index {}.", batch.size(), i);
 					}
 					else
@@ -209,15 +315,17 @@ public class BankWatcherService
 					}
 				}
 
-				Thread.sleep(200);
+				Thread.sleep(200); // safe: background thread, not the client thread
 			}
 
-			log.info("Fetched {} total live prices from WeirdGloop API.", wikiPrices.size());
+			log.info("Fetched {} total live prices from WeirdGloop API.", prices.size());
 		}
 		catch (Exception e)
 		{
 			log.warn("Error fetching Wiki prices: ", e);
 		}
+
+		return prices;
 	}
 
 	/**
@@ -267,7 +375,7 @@ public class BankWatcherService
 
 			if (previousTotals.isEmpty() && previousQuantities.isEmpty())
 			{
-				log.info("No saved snapshot found — starting fresh.");
+				log.info("No saved snapshot found -- starting fresh.");
 			}
 		}
 		catch (Exception e)
@@ -295,68 +403,5 @@ public class BankWatcherService
 		{
 			log.warn("Failed to save snapshot to config.", e);
 		}
-	}
-
-	/**
-	 * Scans the player's bank, calculates deltas, and persists totals.
-	 */
-	public List<BankItem> scanBank()
-	{
-		loadSnapshot();
-
-		ItemContainer bankItems = client.getItemContainer(InventoryID.BANK);
-		if (bankItems == null)
-		{
-			log.info("No bank items found.");
-			return Collections.emptyList();
-		}
-
-		fetchWikiPrices();
-
-		List<BankItem> trackedItems = new ArrayList<>();
-
-		for (Item item : bankItems.getItems())
-		{
-			if (item == null || item.getId() <= 0)
-			{
-				continue;
-			}
-
-			ItemComposition comp = itemManager.getItemComposition(item.getId());
-			if (!comp.isTradeable())
-			{
-				continue;
-			}
-
-			int itemId = item.getId();
-			int gePrice = wikiPrices.getOrDefault(itemId, itemManager.getItemPrice(itemId));
-			int quantity = item.getQuantity();
-			int totalPrice = gePrice * quantity;
-
-			int oldTotal = previousTotals.getOrDefault(itemId, totalPrice);
-			int delta = totalPrice - oldTotal;
-
-			int oldQuantity = previousQuantities.getOrDefault(itemId, quantity);
-			int quantityDelta = quantity - oldQuantity;
-
-			previousTotals.put(itemId, totalPrice);
-			previousQuantities.put(itemId, quantity);
-
-			// You’ll need to update BankItem class to include quantityDelta
-			trackedItems.add(new BankItem(
-				itemId,
-				comp.getName(),
-				gePrice,
-				totalPrice,
-				quantity,
-				delta,
-				quantityDelta
-			));
-		}
-
-		saveSnapshot();
-
-		log.info("Tracked {} bank items.", trackedItems.size());
-		return trackedItems;
 	}
 }

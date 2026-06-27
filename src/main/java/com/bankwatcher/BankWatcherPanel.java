@@ -237,7 +237,7 @@ class BankWatcherPanel extends PluginPanel
 		scanButton.addActionListener(e -> {
 			if (!service.canScan())
 			{
-				JOptionPane.showMessageDialog(this, "You’ve reached the daily scan limit.\nResets at midnight.", "Daily Limit Reached", JOptionPane.INFORMATION_MESSAGE);
+				JOptionPane.showMessageDialog(this, "You've reached the daily scan limit.\nResets at midnight.", "Daily Limit Reached", JOptionPane.INFORMATION_MESSAGE);
 				updateScanButtonState();
 				return;
 			}
@@ -246,12 +246,27 @@ class BankWatcherPanel extends PluginPanel
 			scanButton.setEnabled(false);
 
 			clientThread.invoke(() -> {
-				refreshItems();
+				if (!service.isBankOpen())
+				{
+					// Bank closed -> don't consume a scan, just reset the button.
+					SwingUtilities.invokeLater(() -> {
+						JOptionPane.showMessageDialog(this, "Open your bank before scanning.", "Bank Not Open", JOptionPane.INFORMATION_MESSAGE);
+						scanButton.setText("Scan Bank");
+						updateScanButtonState();
+					});
+					return;
+				}
 
-				SwingUtilities.invokeLater(() -> {
-					scanButton.setText("Scan Bank");
-					updateScanButtonState();
-				});
+				service.recordScan();
+
+				service.scanBankAsync(items ->
+						SwingUtilities.invokeLater(() -> {
+							currentItems = items;
+							applyFilter();
+							scanButton.setText("Scan Bank");
+							updateScanButtonState();
+						})
+				);
 			});
 		});
 
@@ -274,31 +289,25 @@ class BankWatcherPanel extends PluginPanel
 
 	private void updateScanButtonState()
 	{
-		String statusText = service.getScanStatusText();
-		scanButton.setToolTipText(statusText);
+		int count = service.getScanCount();
+		int max = service.getMaxScansPerDay();
 
-		String text = statusText.toLowerCase();
-		boolean canScan = !text.contains("limit") && !text.contains("4/4");
+		scanButton.setToolTipText(count + "/" + max + " scans used today");
 
-		scanButton.setEnabled(canScan);
-
-		if (!canScan)
+		if (count >= max)
 		{
-			scanButton.setToolTipText("Limit Reached");
 			scanButton.setEnabled(false);
+			scanButton.setText("Limit Reached");
+			scanButton.setToolTipText("Daily scan limit reached (" + max + "/" + max + "). Resets at midnight.");
 		}
 		else
 		{
+			scanButton.setEnabled(true);
 			scanButton.setText("Scan Bank");
 		}
 	}
 
 
-	private void refreshItems()
-	{
-		currentItems = service.scanBank();
-		applyFilter();
-	}
 
 	private void applyFilter()
 	{
@@ -347,7 +356,6 @@ class BankWatcherPanel extends PluginPanel
 		{
 			BufferedImage icon = itemManager.getImage(item.getId(), item.getQuantity(), false);
 			BankItemPanel panel = new BankItemPanel(item, icon);
-			panel.setBackground(Color.BLACK);
 			itemListPanel.add(panel);
 		}
 
