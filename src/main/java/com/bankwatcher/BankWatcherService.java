@@ -48,6 +48,9 @@ import net.runelite.client.game.ItemManager;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class BankWatcherService
@@ -178,7 +181,7 @@ public class BankWatcherService
 
 	/**
 	 * Reads bank item IDs on the client thread, then runs the network fetch and
-	 * delta calculation on a background thread. The result is delivered via callback.
+	 * delta calculation off-thread. The result is delivered via callback.
 	 * Must be called from the client thread.
 	 */
 	public void scanBankAsync(Consumer<List<BankItem>> callback)
@@ -224,11 +227,9 @@ public class BankWatcherService
 			fallbackPrices.put(id, itemManager.getItemPrice(id));
 		}
 
-		// Hand off to background thread: network + assembly, no client thread needed.
-		executor.execute(() ->
+		// Fetch prices without blocking; assembly runs once all batches finish.
+		fetchWikiPricesAsync(tradeableIds, livePrices ->
 		{
-			Map<Integer, Integer> livePrices = fetchWikiPrices(tradeableIds);
-
 			List<BankItem> trackedItems = new ArrayList<>();
 			for (int[] raw : rawItems)
 			{
@@ -265,68 +266,105 @@ public class BankWatcherService
 		});
 	}
 
+
 	/**
-	 * Fetch the latest prices from the OSRS Wiki API (WeirdGloop).
-	 * Runs on a background thread -- the Thread.sleep here is safe.
+	 * Fetches prices from the OSRS Wiki API (WeirdGloop) without blocking any thread.
+	 * Batches are staggered via executor.schedule; the last batch to complete
+	 * invokes the callback with the assembled price map. No Thread.sleep, no latch.
 	 */
-	private Map<Integer, Integer> fetchWikiPrices(List<Integer> itemIds)
+	private void fetchWikiPricesAsync(List<Integer> itemIds, Consumer<Map<Integer, Integer>> onComplete)
 	{
-		Map<Integer, Integer> prices = new HashMap<>();
+		Map<Integer, Integer> prices = new ConcurrentHashMap<>();
 		String baseUrl = "https://api.weirdgloop.org/exchange/history/osrs/latest";
 
-		try
+		int batchSize = 100;
+		int delayMs = 200;
+
+		// Split ids into batches up front.
+		List<List<Integer>> batches = new ArrayList<>();
+		for (int i = 0; i < itemIds.size(); i += batchSize)
 		{
-			int batchSize = 100;
-			for (int i = 0; i < itemIds.size(); i += batchSize)
+			batches.add(new ArrayList<>(itemIds.subList(i, Math.min(i + batchSize, itemIds.size()))));
+		}
+
+		if (batches.isEmpty())
+		{
+			onComplete.accept(prices);
+			return;
+		}
+
+		AtomicInteger remaining = new AtomicInteger(batches.size());
+
+		for (int b = 0; b < batches.size(); b++)
+		{
+			final List<Integer> batch = batches.get(b);
+			final int index = b;
+			long delay = (long) b * delayMs;
+
+			executor.schedule(() ->
 			{
-				List<Integer> batch = itemIds.subList(i, Math.min(i + batchSize, itemIds.size()));
-				String joinedIds = String.join("|", batch.stream().map(String::valueOf).toArray(String[]::new));
-				String url = baseUrl + "?id=" + joinedIds;
-
-				Request request = new Request.Builder()
-						.url(url)
-						.header("User-Agent", "bankwatcher-plugin (contact: https://github.com/Khaled2143)")
-						.build();
-
-				try (Response response = httpClient.newCall(request).execute())
+				try
 				{
-					if (response.isSuccessful() && response.body() != null)
+					fetchSingleBatch(baseUrl, batch, index, prices);
+				}
+				finally
+				{
+					// Last batch to finish hands the results off.
+					if (remaining.decrementAndGet() == 0)
 					{
-						String body = response.body().string();
-						com.google.gson.JsonObject json = gson.fromJson(body, com.google.gson.JsonObject.class);
-
-						for (String key : json.keySet())
-						{
-							com.google.gson.JsonObject obj = json.getAsJsonObject(key);
-							if (obj != null && obj.has("price"))
-							{
-								int price = obj.get("price").getAsInt();
-								if (price > 0)
-								{
-									prices.put(Integer.parseInt(key), price);
-								}
-							}
-						}
-						log.info("Fetched {} items for batch starting at index {}.", batch.size(), i);
-					}
-					else
-					{
-						log.warn("Failed to fetch Wiki prices for batch starting at index {}. Code: {}", i, response.code());
+						log.info("Fetched {} total live prices from WeirdGloop API.", prices.size());
+						onComplete.accept(prices);
 					}
 				}
+			}, delay, TimeUnit.MILLISECONDS);
+		}
+	}
 
-				Thread.sleep(200); // safe: background thread, not the client thread
+	/**
+	 * Performs a single batch HTTP request and merges results into the shared map.
+	 */
+	private void fetchSingleBatch(String baseUrl, List<Integer> batch, int index, Map<Integer, Integer> prices)
+	{
+		String joinedIds = String.join("|", batch.stream().map(String::valueOf).toArray(String[]::new));
+		String url = baseUrl + "?id=" + joinedIds;
+
+		Request request = new Request.Builder()
+				.url(url)
+				.header("User-Agent", "bankwatcher-plugin (contact: https://github.com/Khaled2143)")
+				.build();
+
+		try (Response response = httpClient.newCall(request).execute())
+		{
+			if (response.isSuccessful() && response.body() != null)
+			{
+				String body = response.body().string();
+				com.google.gson.JsonObject json = gson.fromJson(body, com.google.gson.JsonObject.class);
+
+				for (String key : json.keySet())
+				{
+					com.google.gson.JsonObject obj = json.getAsJsonObject(key);
+					if (obj != null && obj.has("price"))
+					{
+						int price = obj.get("price").getAsInt();
+						if (price > 0)
+						{
+							prices.put(Integer.parseInt(key), price);
+						}
+					}
+				}
+				log.info("Fetched {} items for batch starting at index {}.", batch.size(), index);
 			}
-
-			log.info("Fetched {} total live prices from WeirdGloop API.", prices.size());
+			else
+			{
+				log.warn("Failed to fetch Wiki prices for batch {}. Code: {}", index, response.code());
+			}
 		}
 		catch (Exception e)
 		{
-			log.warn("Error fetching Wiki prices: ", e);
+			log.warn("Error fetching Wiki price batch {}: ", index, e);
 		}
-
-		return prices;
 	}
+
 
 	/**
 	 * Loads the previously saved snapshot from RuneLite config (runs only once).
