@@ -29,6 +29,7 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import java.lang.reflect.Type;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -51,6 +52,7 @@ import okhttp3.Response;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.TimeUnit;
+import java.time.format.DateTimeFormatter;
 
 @Slf4j
 public class BankWatcherService
@@ -61,6 +63,7 @@ public class BankWatcherService
 	private static final String QUANTITY_SNAPSHOT_KEY = "bank_quantities";
 	private static final String CONFIG_GROUP = "bankwatcher";
 	private static final String SNAPSHOT_KEY = "bank_snapshot";
+	private static final String LAST_SCAN_TIME_KEY = "last_scan_time";
 	private final Map<Integer, Integer> previousTotals = new HashMap<>();
 	private final Map<Integer, Integer> previousQuantities = new HashMap<>();
 
@@ -100,32 +103,6 @@ public class BankWatcherService
 		return getScanCount() < MAX_SCANS_PER_DAY;
 	}
 
-	public String getScanStatusText()
-	{
-		String today = LocalDate.now().toString();
-		String lastResetDay = configManager.getConfiguration(CONFIG_GROUP, LAST_RESET_KEY);
-		int scanCount = 0;
-
-		try
-		{
-			String countStr = configManager.getConfiguration(CONFIG_GROUP, SCAN_COUNT_KEY);
-			if (countStr != null)
-			{
-				scanCount = Integer.parseInt(countStr);
-			}
-		}
-		catch (Exception ignored)
-		{
-		}
-
-		boolean newDay = (lastResetDay == null || !lastResetDay.equals(today));
-		if (newDay)
-		{
-			return String.format("You've used 0/%d scans today. Daily reset active.", MAX_SCANS_PER_DAY);
-		}
-
-		return String.format("You have used %d/%d scans today. Next reset at midnight.", scanCount, MAX_SCANS_PER_DAY);
-	}
 
 	/**
 	 * Records that a scan was used (increments the daily counter).
@@ -135,6 +112,7 @@ public class BankWatcherService
 	{
 		int count = getScanCount() + 1;
 		configManager.setConfiguration(CONFIG_GROUP, SCAN_COUNT_KEY, String.valueOf(count));
+		configManager.setConfiguration(CONFIG_GROUP, LAST_SCAN_TIME_KEY, LocalDateTime.now().toString());
 		configManager.sendConfig();
 	}
 	/**
@@ -200,6 +178,7 @@ public class BankWatcherService
 		List<int[]> rawItems = new ArrayList<>(); // [id, quantity]
 		List<Integer> tradeableIds = new ArrayList<>();
 		Map<Integer, String> names = new HashMap<>();
+		Map<Integer, Integer> alchValues = new HashMap<>();
 
 		for (Item item : bankItems.getItems())
 		{
@@ -218,6 +197,7 @@ public class BankWatcherService
 			rawItems.add(new int[]{itemId, item.getQuantity()});
 			tradeableIds.add(itemId);
 			names.put(itemId, comp.getName());
+			alchValues.put(itemId, comp.getHaPrice());
 		}
 
 		// Fallback prices (itemManager) are safe to read here too.
@@ -255,7 +235,8 @@ public class BankWatcherService
 						totalPrice,
 						quantity,
 						delta,
-						quantityDelta
+						quantityDelta,
+						alchValues.getOrDefault(itemId, 0)
 				));
 			}
 
@@ -266,6 +247,25 @@ public class BankWatcherService
 		});
 	}
 
+	public String getLastScanText()
+	{
+		String stored = configManager.getConfiguration(CONFIG_GROUP, LAST_SCAN_TIME_KEY);
+		if (stored == null || stored.isEmpty())
+		{
+			return "No scans yet today. Resets at midnight.";
+		}
+
+		try
+		{
+			LocalDateTime lastScan = LocalDateTime.parse(stored);
+			String formatted = lastScan.format(DateTimeFormatter.ofPattern("h:mm a"));
+			return String.format("Last scan: %s. Resets at midnight.", formatted);
+		}
+		catch (Exception e)
+		{
+			return "Resets at midnight.";
+		}
+	}
 
 	/**
 	 * Fetches prices from the OSRS Wiki API (WeirdGloop) without blocking any thread.

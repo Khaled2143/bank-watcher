@@ -48,7 +48,7 @@ public class BankItemPanel extends JPanel
 		setLayout(new BorderLayout(8, 0));
 		setBorder(BorderFactory.createCompoundBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4), BorderFactory.createLineBorder(ColorScheme.MEDIUM_GRAY_COLOR, 1)));
 		setBackground(ColorScheme.DARKER_GRAY_COLOR);
-		setMaximumSize(new Dimension(Integer.MAX_VALUE, 75));
+		setMaximumSize(new Dimension(Integer.MAX_VALUE, 120));
 
 		JLabel iconLabel = (icon != null) ? new JLabel(new ImageIcon(icon)) : new JLabel("🪙", SwingConstants.CENTER);
 
@@ -81,16 +81,20 @@ public class BankItemPanel extends JPanel
 		JLabel geLabel = new JLabel(String.format("GE: %,d", item.getGePrice()));
 		JLabel qtyLabel = new JLabel(String.format("Qty: %,d", item.getQuantity()));
 		JLabel totalLabel = new JLabel(String.format("Total: %,d", item.getTotalPrice()));
+		JLabel alchLabel = new JLabel(String.format("Alch: %,d", item.getAlchValue()));
 
 		Dimension statSize = new Dimension(140, 16);
 
 		geLabel.setPreferredSize(statSize);
 		qtyLabel.setPreferredSize(statSize);
 		totalLabel.setPreferredSize(statSize);
+		alchLabel.setPreferredSize(statSize);
+
 
 		geLabel.setMaximumSize(statSize);
 		qtyLabel.setMaximumSize(statSize);
 		totalLabel.setMaximumSize(statSize);
+		alchLabel.setMaximumSize(statSize);
 
 		// --- Quantity Delta ---
 		int qtyDeltaValue = item.getQuantityDelta();
@@ -105,6 +109,9 @@ public class BankItemPanel extends JPanel
 			JPanel qtyPanel = new JPanel();
 			qtyPanel.setLayout(new FlowLayout(FlowLayout.LEFT, 5, 0));
 			qtyPanel.setOpaque(false);
+			qtyPanel.setPreferredSize(statSize);
+			qtyPanel.setMaximumSize(statSize);
+			qtyPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
 			qtyPanel.add(qtyLabel);
 			qtyPanel.add(qtyDeltaLabel);
 			statsPanel.add(qtyPanel);
@@ -115,7 +122,7 @@ public class BankItemPanel extends JPanel
 		}
 
 		// Apply consistent styling
-		for (JLabel label : new JLabel[]{geLabel, totalLabel})
+		for (JLabel label : new JLabel[]{geLabel, totalLabel, alchLabel})
 		{
 			label.setFont(label.getFont().deriveFont(14f));
 			label.setForeground(Color.LIGHT_GRAY);
@@ -124,6 +131,7 @@ public class BankItemPanel extends JPanel
 
 		statsPanel.add(geLabel);
 		statsPanel.add(totalLabel);
+		statsPanel.add(alchLabel);
 
 		// Compute delta — only show when it changed
 		int deltaValue = item.getDelta();

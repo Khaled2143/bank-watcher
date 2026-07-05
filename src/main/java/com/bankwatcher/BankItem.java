@@ -10,8 +10,9 @@ public class BankItem
 	private final int delta;
 	private final int quantityDelta;
 	private final int id;
+	private final int alchValue;
 
-	public BankItem(int id, String name, int gePrice, int totalPrice, int quantity, int delta, int quantityDelta)
+	public BankItem(int id, String name, int gePrice, int totalPrice, int quantity, int delta, int quantityDelta, int alchValue)
 	{
 		this.id = id;
 		this.name = name;
@@ -20,7 +21,12 @@ public class BankItem
 		this.totalPrice = totalPrice;
 		this.delta = delta;
 		this.quantityDelta = quantityDelta;
+		this.alchValue = alchValue;
+	}
 
+	public int getAlchValue()
+	{
+		return alchValue;
 	}
 
 	public int getQuantityDelta()
@@ -61,6 +67,6 @@ public class BankItem
 	@Override
 	public String toString()
 	{
-		return String.format("%s | Price: %,d | Total: %,d | Quantity: %,d | Delta: %,d", name, gePrice, totalPrice, quantity, delta);
+		return String.format("%s | Price: %,d | Total: %,d | Quantity: %,d | Delta: %,d | Alch: %,d", name, gePrice, totalPrice, quantity, delta, alchValue);
 	}
 }

@@ -135,7 +135,7 @@ class BankWatcherPanel extends PluginPanel
 					protected void configureScrollBarColors()
 					{
 						super.configureScrollBarColors();
-						this.thumbColor = ColorScheme.DARKER_GRAY_COLOR;
+						this.thumbColor = Color.WHITE;
 						this.trackColor = ColorScheme.DARK_GRAY_COLOR;
 					}
 
@@ -172,7 +172,7 @@ class BankWatcherPanel extends PluginPanel
 						g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
 
-						g2.setColor(ColorScheme.DARKER_GRAY_COLOR);
+						g2.setColor(Color.WHITE);
 						int arc = 8;
 						g2.fillRoundRect(thumbBounds.x, thumbBounds.y, thumbBounds.width, thumbBounds.height, arc, arc);
 						g2.dispose();
@@ -221,7 +221,7 @@ class BankWatcherPanel extends PluginPanel
 		JLabel filterLabel = new JLabel("Filter:");
 		filterLabel.setForeground(Color.WHITE);
 
-		filterDropdown = new JComboBox<>(new String[]{"All Items", "Top Movers", "Gainers", "Losers"});
+		filterDropdown = new JComboBox<>(new String[]{"All Items", "Top Movers", "Gainers", "Losers", "High Alch"});
 		filterDropdown.setFocusable(false);
 		filterDropdown.setBackground(Color.WHITE);
 		filterDropdown.setForeground(Color.BLACK);
@@ -292,7 +292,7 @@ class BankWatcherPanel extends PluginPanel
 		int count = service.getScanCount();
 		int max = service.getMaxScansPerDay();
 
-		scanButton.setToolTipText(count + "/" + max + " scans used today");
+		scanButton.setToolTipText("<html>" + count + "/" + max + " scans used today<br>" + service.getLastScanText() + "</html>");
 
 		if (count >= max)
 		{
@@ -338,6 +338,14 @@ class BankWatcherPanel extends PluginPanel
 			case "Losers":
 				filtered = currentItems.stream().filter(i -> i.getDelta() < 0).sorted((a, b) -> Integer.compare(a.getDelta(), b.getDelta())).collect(Collectors.toList());
 				headerLabel.setText("Showing Losers");
+				break;
+
+			case "High Alch":
+				filtered = currentItems.stream()
+						.filter(i -> i.getAlchValue() > 0)
+						.sorted((a, b) -> Integer.compare(b.getAlchValue(), a.getAlchValue()))
+						.collect(Collectors.toList());
+				headerLabel.setText("Showing High Alch Value");
 				break;
 
 			default:
