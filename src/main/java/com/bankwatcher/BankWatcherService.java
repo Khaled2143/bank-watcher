@@ -228,15 +228,12 @@ public class BankWatcherService
 				previousTotals.put(itemId, totalPrice);
 				previousQuantities.put(itemId, quantity);
 
+				int alch = alchValues.getOrDefault(itemId, 0);
+				String name = names.get(itemId);
+
 				trackedItems.add(new BankItem(
-						itemId,
-						names.get(itemId),
-						gePrice,
-						totalPrice,
-						quantity,
-						delta,
-						quantityDelta,
-						alchValues.getOrDefault(itemId, 0)
+						itemId, name, gePrice, totalPrice, oldTotal,
+						quantity, delta, quantityDelta, alch
 				));
 			}
 

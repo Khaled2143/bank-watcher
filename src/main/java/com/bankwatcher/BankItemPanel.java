@@ -29,7 +29,6 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.image.BufferedImage;
 import javax.swing.BorderFactory;
@@ -43,120 +42,126 @@ import net.runelite.client.ui.ColorScheme;
 
 public class BankItemPanel extends JPanel
 {
+	private static final Color GAIN = new Color(0, 200, 0);
+	private static final Color LOSS = new Color(230, 60, 60);
+	private static final Color MUTED = new Color(190, 190, 190);
+
 	public BankItemPanel(BankItem item, BufferedImage icon)
 	{
 		setLayout(new BorderLayout(8, 0));
-		setBorder(BorderFactory.createCompoundBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4), BorderFactory.createLineBorder(ColorScheme.MEDIUM_GRAY_COLOR, 1)));
 		setBackground(ColorScheme.DARKER_GRAY_COLOR);
-		setMaximumSize(new Dimension(Integer.MAX_VALUE, 120));
+		setMaximumSize(new Dimension(Integer.MAX_VALUE, 160));
 
-		JLabel iconLabel = (icon != null) ? new JLabel(new ImageIcon(icon)) : new JLabel("🪙", SwingConstants.CENTER);
+		int delta = item.getDelta();
 
+		// Left-edge accent: green up, red down, neutral if unchanged.
+		Color edge = delta > 0 ? GAIN : (delta < 0 ? LOSS : ColorScheme.MEDIUM_GRAY_COLOR);
+		setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createEmptyBorder(4, 4, 4, 4),
+				BorderFactory.createCompoundBorder(
+						BorderFactory.createLineBorder(ColorScheme.MEDIUM_GRAY_COLOR, 1),
+						BorderFactory.createMatteBorder(0, 3, 0, 0, edge))));
+
+		JLabel iconLabel = (icon != null) ? new JLabel(new ImageIcon(icon)) : new JLabel("\uD83E\uDE99", SwingConstants.CENTER);
 		iconLabel.setPreferredSize(new Dimension(45, 45));
 		add(iconLabel, BorderLayout.WEST);
 
-		// --- Text Panel ---
 		JPanel textPanel = new JPanel();
 		textPanel.setLayout(new BoxLayout(textPanel, BoxLayout.Y_AXIS));
 		textPanel.setOpaque(false);
 
-		// Name at the top
+		// --- Name ---
 		JLabel nameLabel = new JLabel(item.getName());
-		nameLabel.setFont(nameLabel.getFont().deriveFont(Font.BOLD, 14f));
+		nameLabel.setFont(nameLabel.getFont().deriveFont(Font.BOLD, 15f));
 		nameLabel.setForeground(Color.WHITE);
 		nameLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-		nameLabel.setPreferredSize(new Dimension(160, 18));
-		nameLabel.setMaximumSize(new Dimension(160, 18));
-		nameLabel.setMinimumSize(new Dimension(160, 18));
-
-
-		// --- Stats Panel (stacked vertically) ---
-		JPanel statsPanel = new JPanel();
-		statsPanel.setLayout(new BoxLayout(statsPanel, BoxLayout.Y_AXIS));
-		statsPanel.setOpaque(false);
-		statsPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-		// Individual stat labels
-		JLabel geLabel = new JLabel(String.format("GE: %,d", item.getGePrice()));
-		JLabel qtyLabel = new JLabel(String.format("Qty: %,d", item.getQuantity()));
-		JLabel totalLabel = new JLabel(String.format("Total: %,d", item.getTotalPrice()));
-		JLabel alchLabel = new JLabel(String.format("Alch: %,d", item.getAlchValue()));
-
-		Dimension statSize = new Dimension(140, 16);
-
-		geLabel.setPreferredSize(statSize);
-		qtyLabel.setPreferredSize(statSize);
-		totalLabel.setPreferredSize(statSize);
-		alchLabel.setPreferredSize(statSize);
-
-
-		geLabel.setMaximumSize(statSize);
-		qtyLabel.setMaximumSize(statSize);
-		totalLabel.setMaximumSize(statSize);
-		alchLabel.setMaximumSize(statSize);
-
-		// --- Quantity Delta ---
-		int qtyDeltaValue = item.getQuantityDelta();
-		if (qtyDeltaValue != 0)
-		{
-			String qtyPrefix = qtyDeltaValue > 0 ? "+" : "-";
-			Color qtyColor = qtyDeltaValue > 0 ? new Color(0, 200, 0) : new Color(230, 60, 60);
-			JLabel qtyDeltaLabel = new JLabel(String.format("(%s%,d)", qtyPrefix, Math.abs(qtyDeltaValue)));
-			qtyDeltaLabel.setFont(qtyLabel.getFont().deriveFont(13f));
-			qtyDeltaLabel.setForeground(qtyColor);
-
-			JPanel qtyPanel = new JPanel();
-			qtyPanel.setLayout(new FlowLayout(FlowLayout.LEFT, 5, 0));
-			qtyPanel.setOpaque(false);
-			qtyPanel.setPreferredSize(statSize);
-			qtyPanel.setMaximumSize(statSize);
-			qtyPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-			qtyPanel.add(qtyLabel);
-			qtyPanel.add(qtyDeltaLabel);
-			statsPanel.add(qtyPanel);
-		}
-		else
-		{
-			statsPanel.add(qtyLabel);
-		}
-
-		// Apply consistent styling
-		for (JLabel label : new JLabel[]{geLabel, totalLabel, alchLabel})
-		{
-			label.setFont(label.getFont().deriveFont(14f));
-			label.setForeground(Color.LIGHT_GRAY);
-			label.setAlignmentX(Component.LEFT_ALIGNMENT);
-		}
-
-		statsPanel.add(geLabel);
-		statsPanel.add(totalLabel);
-		statsPanel.add(alchLabel);
-
-		// Compute delta — only show when it changed
-		int deltaValue = item.getDelta();
-		if (deltaValue != 0)
-		{
-			String prefix = deltaValue > 0 ? "+" : "-";
-			Color deltaColor = deltaValue > 0 ? new Color(0, 200, 0) : new Color(230, 60, 60);
-
-			JLabel deltaLabel = new JLabel(String.format("Change: %s%,d", prefix, Math.abs(deltaValue)));
-			deltaLabel.setFont(deltaLabel.getFont().deriveFont(14f));
-			deltaLabel.setForeground(deltaColor);
-			deltaLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-			deltaLabel.setBorder(BorderFactory.createEmptyBorder(3, 0, 0, 0));
-
-			deltaLabel.setPreferredSize(new Dimension(160, 16));
-			deltaLabel.setMaximumSize(new Dimension(160, 16));
-			deltaLabel.setMinimumSize(new Dimension(160, 16));
-
-			statsPanel.add(deltaLabel);
-		}
+		// --- Stats: each on its own full-width line ---
+		int qtyDelta = item.getQuantityDelta();
+		String qtyText = qtyDelta != 0
+				? String.format("Qty: %s (%s%s)", format(item.getQuantity()), qtyDelta > 0 ? "+" : "-", format(Math.abs(qtyDelta)))
+				: String.format("Qty: %s", format(item.getQuantity()));
 
 		textPanel.add(nameLabel);
 		textPanel.add(Box.createVerticalStrut(3));
-		textPanel.add(statsPanel);
+		textPanel.add(muted(qtyText));
+		textPanel.add(muted(String.format("GE: %s", format(item.getGePrice()))));
+		textPanel.add(muted(String.format("Alch: %s", format(item.getAlchValue()))));
+
+		// --- Last / New scan totals ---
+		if (delta != 0)
+		{
+			textPanel.add(Box.createVerticalStrut(2));
+			textPanel.add(muted(String.format("Last scan: %s", format(item.getOldTotal()))));
+			textPanel.add(muted(String.format("New scan: %s", format(item.getTotalPrice()))));
+			textPanel.add(buildChangeLabel(item));
+		}
+		else
+		{
+			textPanel.add(muted(String.format("Total: %s", format(item.getTotalPrice()))));
+		}
 
 		add(textPanel, BorderLayout.CENTER);
+	}
+
+	private JLabel buildChangeLabel(BankItem item)
+	{
+		int delta = item.getDelta();
+		int baseline = item.getOldTotal();
+
+		String pctText = "";
+		if (baseline != 0)
+		{
+			double pct = delta * 100.0 / baseline;
+			pctText = String.format(" (%+.1f%%)", pct);
+		}
+
+		String prefix = delta > 0 ? "+" : "-";
+		JLabel changeLabel = new JLabel(String.format("Change: %s%s%s", prefix, format(Math.abs(delta)), pctText));
+		changeLabel.setFont(changeLabel.getFont().deriveFont(Font.BOLD, 14f));
+		changeLabel.setForeground(delta > 0 ? GAIN : LOSS);
+		changeLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		changeLabel.setBorder(BorderFactory.createEmptyBorder(2, 0, 0, 0));
+		return changeLabel;
+	}
+
+	/**
+	 * Full commas under 100K; K/M/B with one decimal above, so large values
+	 * don't overflow the fixed panel width.
+	 */
+	private String format(long value)
+	{
+		long abs = Math.abs(value);
+		if (abs < 100_000)
+		{
+			return String.format("%,d", value);
+		}
+		if (abs < 1_000_000)
+		{
+			return trim(value / 1_000.0) + "K";
+		}
+		if (abs < 1_000_000_000)
+		{
+			return trim(value / 1_000_000.0) + "M";
+		}
+		return trim(value / 1_000_000_000.0) + "B";
+	}
+
+	/**
+	 * One decimal, but drop a trailing ".0" so 5M reads "5M" not "5.0M".
+	 */
+	private String trim(double v)
+	{
+		String s = String.format("%.1f", v);
+		return s.endsWith(".0") ? s.substring(0, s.length() - 2) : s;
+	}
+
+	private JLabel muted(String text)
+	{
+		JLabel label = new JLabel(text);
+		label.setFont(label.getFont().deriveFont(14f));
+		label.setForeground(MUTED);
+		label.setAlignmentX(Component.LEFT_ALIGNMENT);
+		return label;
 	}
 }
