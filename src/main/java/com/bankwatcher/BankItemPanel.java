@@ -52,7 +52,7 @@ public class BankItemPanel extends JPanel
 		setBackground(ColorScheme.DARKER_GRAY_COLOR);
 		setMaximumSize(new Dimension(Integer.MAX_VALUE, 160));
 
-		int delta = item.getDelta();
+		long delta = item.getDelta();
 
 		// Left-edge accent: green up, red down, neutral if unchanged.
 		Color edge = delta > 0 ? GAIN : (delta < 0 ? LOSS : ColorScheme.MEDIUM_GRAY_COLOR);
@@ -106,8 +106,8 @@ public class BankItemPanel extends JPanel
 
 	private JLabel buildChangeLabel(BankItem item)
 	{
-		int delta = item.getDelta();
-		int baseline = item.getOldTotal();
+		long delta = item.getDelta();
+		long baseline = item.getOldTotal();
 
 		String pctText = "";
 		if (baseline != 0)

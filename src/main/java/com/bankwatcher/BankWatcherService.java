@@ -40,7 +40,7 @@ import java.util.function.Consumer;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
-import net.runelite.api.InventoryID;
+import net.runelite.api.gameval.InventoryID;
 import net.runelite.api.Item;
 import net.runelite.api.ItemComposition;
 import net.runelite.api.ItemContainer;
@@ -64,7 +64,7 @@ public class BankWatcherService
 	private static final String CONFIG_GROUP = "bankwatcher";
 	private static final String SNAPSHOT_KEY = "bank_snapshot";
 	private static final String LAST_SCAN_TIME_KEY = "last_scan_time";
-	private final Map<Integer, Integer> previousTotals = new HashMap<>();
+	private final Map<Integer, Long> previousTotals = new HashMap<>();
 	private final Map<Integer, Integer> previousQuantities = new HashMap<>();
 
 	@Inject
@@ -201,7 +201,7 @@ public class BankWatcherService
 		}
 
 		// Fallback prices (itemManager) are safe to read here too.
-		Map<Integer, Integer> fallbackPrices = new HashMap<>();
+		Map<Integer, Long> fallbackPrices = new HashMap<>();
 		for (int id : tradeableIds)
 		{
 			fallbackPrices.put(id, itemManager.getItemPrice(id));
@@ -216,11 +216,11 @@ public class BankWatcherService
 				int itemId = raw[0];
 				int quantity = raw[1];
 
-				int gePrice = livePrices.getOrDefault(itemId, fallbackPrices.getOrDefault(itemId, 0));
-				int totalPrice = gePrice * quantity;
+				long gePrice = livePrices.getOrDefault(itemId, fallbackPrices.getOrDefault(itemId, 0L));
+				long totalPrice = gePrice * quantity;
 
-				int oldTotal = previousTotals.getOrDefault(itemId, totalPrice);
-				int delta = totalPrice - oldTotal;
+				long oldTotal = previousTotals.getOrDefault(itemId, totalPrice);
+				long delta = totalPrice - oldTotal;
 
 				int oldQuantity = previousQuantities.getOrDefault(itemId, quantity);
 				int quantityDelta = quantity - oldQuantity;
@@ -269,9 +269,9 @@ public class BankWatcherService
 	 * Batches are staggered via executor.schedule; the last batch to complete
 	 * invokes the callback with the assembled price map. No Thread.sleep, no latch.
 	 */
-	private void fetchWikiPricesAsync(List<Integer> itemIds, Consumer<Map<Integer, Integer>> onComplete)
+	private void fetchWikiPricesAsync(List<Integer> itemIds, Consumer<Map<Integer, Long>> onComplete)
 	{
-		Map<Integer, Integer> prices = new ConcurrentHashMap<>();
+		Map<Integer, Long> prices = new ConcurrentHashMap<>();
 		String baseUrl = "https://api.weirdgloop.org/exchange/history/osrs/latest";
 
 		int batchSize = 100;
@@ -320,7 +320,7 @@ public class BankWatcherService
 	/**
 	 * Performs a single batch HTTP request and merges results into the shared map.
 	 */
-	private void fetchSingleBatch(String baseUrl, List<Integer> batch, int index, Map<Integer, Integer> prices)
+	private void fetchSingleBatch(String baseUrl, List<Integer> batch, int index, Map<Integer, Long> prices)
 	{
 		String joinedIds = String.join("|", batch.stream().map(String::valueOf).toArray(String[]::new));
 		String url = baseUrl + "?id=" + joinedIds;
@@ -342,7 +342,7 @@ public class BankWatcherService
 					com.google.gson.JsonObject obj = json.getAsJsonObject(key);
 					if (obj != null && obj.has("price"))
 					{
-						int price = obj.get("price").getAsInt();
+						long price = obj.get("price").getAsLong();
 						if (price > 0)
 						{
 							prices.put(Integer.parseInt(key), price);
@@ -380,10 +380,10 @@ public class BankWatcherService
 			String totalsJson = configManager.getConfiguration(CONFIG_GROUP, SNAPSHOT_KEY);
 			if (totalsJson != null && !totalsJson.isEmpty())
 			{
-				Type type = new TypeToken<Map<Integer, Integer>>()
+				Type type = new TypeToken<Map<Integer, Long>>()
 				{
 				}.getType();
-				Map<Integer, Integer> loaded = gson.fromJson(totalsJson, type);
+				Map<Integer, Long> loaded = gson.fromJson(totalsJson, type);
 				if (loaded != null)
 				{
 					previousTotals.clear();

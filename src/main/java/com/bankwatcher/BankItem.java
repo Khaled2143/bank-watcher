@@ -29,16 +29,16 @@ public class BankItem
 {
 
 	private final String name;
-	private final int gePrice;
+	private final long gePrice;
+	private final long totalPrice;
+	private final long oldTotal;
+	private final long delta;
 	private final int quantity;
-	private final int totalPrice;
-	private final int oldTotal;
-	private final int delta;
 	private final int quantityDelta;
 	private final int id;
 	private final int alchValue;
 
-	public BankItem(int id, String name, int gePrice, int totalPrice, int oldTotal, int quantity, int delta, int quantityDelta, int alchValue)
+	public BankItem(int id, String name, long gePrice, long totalPrice, long oldTotal, int quantity, long delta, int quantityDelta, int alchValue)
 	{
 		this.id = id;
 		this.name = name;
@@ -66,12 +66,12 @@ public class BankItem
 		return id;
 	}
 
-	public int getDelta()
+	public long getDelta()
 	{
 		return delta;
 	}
 
-	public int getOldTotal()
+	public long getOldTotal()
 	{
 		return oldTotal;
 	}
@@ -86,12 +86,12 @@ public class BankItem
 		return name;
 	}
 
-	public int getGePrice()
+	public long getGePrice()
 	{
 		return gePrice;
 	}
 
-	public int getTotalPrice()
+	public long getTotalPrice()
 	{
 		return totalPrice;
 	}

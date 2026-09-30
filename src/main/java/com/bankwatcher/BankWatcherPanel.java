@@ -326,17 +326,17 @@ class BankWatcherPanel extends PluginPanel
 		switch (selected)
 		{
 			case "Top Movers":
-				filtered = currentItems.stream().sorted((a, b) -> Integer.compare(Math.abs(b.getDelta()), Math.abs(a.getDelta()))).limit(25).collect(Collectors.toList());
+				filtered = currentItems.stream().sorted((a, b) -> Long.compare(Math.abs(b.getDelta()), Math.abs(a.getDelta()))).limit(25).collect(Collectors.toList());
 				headerLabel.setText("Showing Top 25 Movers");
 				break;
 
 			case "Gainers":
-				filtered = currentItems.stream().filter(i -> i.getDelta() > 0).sorted((a, b) -> Integer.compare(b.getDelta(), a.getDelta())).collect(Collectors.toList());
+				filtered = currentItems.stream().filter(i -> i.getDelta() > 0).sorted((a, b) -> Long.compare(b.getDelta(), a.getDelta())).collect(Collectors.toList());
 				headerLabel.setText("Showing Gainers");
 				break;
 
 			case "Losers":
-				filtered = currentItems.stream().filter(i -> i.getDelta() < 0).sorted((a, b) -> Integer.compare(a.getDelta(), b.getDelta())).collect(Collectors.toList());
+				filtered = currentItems.stream().filter(i -> i.getDelta() < 0).sorted((a, b) -> Long.compare(a.getDelta(), b.getDelta())).collect(Collectors.toList());
 				headerLabel.setText("Showing Losers");
 				break;
 
